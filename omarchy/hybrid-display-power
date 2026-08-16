@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+action=${1:-}
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+state_dir="$runtime_dir/omarchy-hybrid-display-power"
+brightness_state="$state_dir/internal-brightness"
+backlight_state="$state_dir/backlight-device"
+
+mkdir -p "$state_dir"
+exec 9>"$state_dir/action.lock"
+flock 9
+
+internal_monitor=$(omarchy-hyprland-monitor-laptop 2>/dev/null || true)
+backlight_device=$(omarchy-hw-display 2>/dev/null || true)
+
+external_monitors() {
+  hyprctl monitors -j 2>/dev/null | jq -r --arg internal "$internal_monitor" \
+    '.[] | select(.name != $internal and .disabled == false) | .name'
+}
+
+set_external_dpms() {
+  local dpms_action=$1 monitor
+
+  while IFS= read -r monitor; do
+    [[ $monitor =~ ^[A-Za-z0-9_.:-]+$ ]] || continue
+    hyprctl dispatch \
+      "hl.dsp.dpms({ action = \"$dpms_action\", monitor = \"$monitor\" })" \
+      >/dev/null 2>&1 || true
+  done < <(external_monitors)
+}
+
+save_and_blank_internal_backlight() {
+  [[ -n $internal_monitor && -n $backlight_device ]] || return 0
+
+  if [[ ! -s $brightness_state ]]; then
+    brightnessctl -d "$backlight_device" get >"$brightness_state"
+    printf '%s\n' "$backlight_device" >"$backlight_state"
+  fi
+
+  brightnessctl -d "$backlight_device" set 0 >/dev/null
+}
+
+restore_internal_backlight() {
+  local saved_device saved_brightness
+
+  [[ -s $brightness_state && -s $backlight_state ]] || return 0
+  saved_device=$(<"$backlight_state")
+  saved_brightness=$(<"$brightness_state")
+
+  if [[ $saved_brightness =~ ^[0-9]+$ ]]; then
+    brightnessctl -d "$saved_device" set "$saved_brightness" >/dev/null || true
+  fi
+
+  rm -f "$brightness_state" "$backlight_state"
+}
+
+case "$action" in
+blank)
+  omarchy-brightness-keyboard off >/dev/null 2>&1 || true
+  save_and_blank_internal_backlight
+  set_external_dpms disable
+  ;;
+wake)
+  set_external_dpms enable
+  restore_internal_backlight
+  omarchy-brightness-keyboard restore >/dev/null 2>&1 || true
+  omarchy-hyprland-monitor-clamshell >/dev/null 2>&1 || true
+  ;;
+*)
+  printf 'Usage: %s {blank|wake}\n' "$0" >&2
+  exit 2
+  ;;
+esac

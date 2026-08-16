@@ -29,6 +29,8 @@ The procedures below were verified on 2026-08-16.
 - Hyprland uses NVIDIA as the primary DRM renderer while retaining Intel for
   the internal panel.
 - Both displays work, and the external 144 Hz monitor is smooth.
+- Omarchy's lock screen uses the hybrid-display sleep workaround described
+  below, preventing the Intel panel from wedging after display sleep.
 
 ## Problem 1: false CPU throttling
 
@@ -207,6 +209,59 @@ export AQ_DRM_DEVICES="/dev/dri/card1"
 
 This was not necessary for the successful dual-monitor setup. The known-good
 configuration keeps both cards listed, with NVIDIA first.
+
+### Permanent lock-screen sleep workaround
+
+With NVIDIA as Hyprland's primary renderer, Omarchy's normal lock behavior
+turned every output off with DPMS. Waking both GPUs could leave `eDP-1` black
+even though Hyprland reported it enabled, DPMS-on, and at full brightness. The
+log contained errors such as:
+
+```text
+Cannot commit when a page-flip is awaiting
+EGL_BAD_MATCH: createImageFromDmaBufs failed
+```
+
+Logging out and back in recovered the panel. Cycling DPMS or forcing a renderer
+reload did not reliably recover an already-wedged panel.
+
+The verified workaround keeps the Intel-connected `eDP-1` logically enabled
+while the machine is locked. It saves the panel's brightness and sets its
+backlight to zero. External outputs are put into DPMS sleep individually. On
+activity, it wakes the external outputs and restores the exact saved internal
+brightness. This prevents Aquamarine from tearing down the Intel secondary
+renderer while still making both screens dark.
+
+The strategy passed three consecutive blank/wake cycles on the tested machine
+without deinitializing the Intel renderer or producing a stuck atomic commit.
+
+Install it from this repository while logged into Omarchy:
+
+```bash
+./omarchy/install-hybrid-display-power.sh
+```
+
+The installer uses Omarchy's supported plugin clone mechanism. It creates a
+user-owned clone of `omarchy.lock`, stores it under
+`~/.config/omarchy/plugins/$USER.lock`, installs the display helper there, and
+switches the lock plugin's blank/wake commands to that helper. It does not edit
+anything under `/usr/share/omarchy`. It restarts the Omarchy shell at the end so
+the replaced built-in lock service cannot remain active in the current session.
+
+Uninstall the workaround, remove the cloned plugin, and restore Omarchy's
+built-in lock plugin with:
+
+```bash
+./omarchy/uninstall-hybrid-display-power.sh
+```
+
+After installation, test the full integration manually:
+
+1. Run `omarchy system lock`.
+2. Wait at least five seconds for both displays to blank.
+3. Move the mouse or press a key.
+4. Confirm both displays show the lock screen.
+5. Unlock and confirm the original laptop brightness was restored.
 
 ## Package power and GPU limits
 
