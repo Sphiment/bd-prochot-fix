@@ -123,6 +123,11 @@ the CPU resumed normal turbo behavior while remaining below its thermal limit.
 Other Intel models may use different firmware behavior. Inspect the status and
 test temporarily before installing.
 
+The same machine also needed an NVIDIA-primary Hyprland configuration to make
+an external 144 Hz monitor render smoothly. The complete machine-specific
+diagnosis, recovery procedure, verification commands, and rollback steps are
+documented in [HP Pavilion Power 15 recovery notes](docs/HP-PAVILION-POWER-15-RECOVERY.md).
+
 ## License
 
 [MIT](LICENSE)
