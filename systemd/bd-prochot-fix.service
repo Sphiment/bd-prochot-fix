@@ -1,0 +1,14 @@
+[Unit]
+Description=Disable false Intel BD PROCHOT throttling
+Documentation=https://github.com/Sphiment/bd-prochot-fix
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/modprobe msr
+ExecStart=/usr/local/sbin/bd-prochot-fix disable
+ExecStop=/usr/local/sbin/bd-prochot-fix enable
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Some firmware restores MSR_POWER_CTL across suspend. Reapply the workaround
+# only after the machine resumes.
+if [[ ${1:-} == post ]]; then
+  /usr/local/sbin/bd-prochot-fix disable
+fi
